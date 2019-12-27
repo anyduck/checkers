@@ -15,7 +15,7 @@ try:
     s.bind((server, port))
 
 except socket.error as e:
-    print(str(e))
+    print('[ERROR SOCKET] ', e)
 
 s.listen()
 print("[START] Waiting for a connection")
@@ -24,154 +24,89 @@ connections = 0
 
 games = {0: Board(8, 8)}
 
-spectartor_ids = []
-specs = 0
 
+def threaded_client(conn, game):
+    global games, connections
 
-def read_specs():
-    global spectartor_ids
+    name = None
+    bo = games[game]
 
-    spectartor_ids = []
-    try:
-        with open("specs.txt", "r") as f:
-            for line in f:
-                spectartor_ids.append(line.strip())
-    except:
-        print("[ERROR] No specs.txt file found, creating one...")
-        open("specs.txt", "w")
-
-
-def threaded_client(conn, game, spec=False):
-    global games, currentId, connections, specs
-
-    if not spec:
-        name = None
-        bo = games[game]
-
-        if connections % 2 == 0:
-            currentId = "white"
-        else:
-            currentId = "black"
-
-        bo.start_user = currentId
-
-        # Pickle the object and send it to the server
-        data_string = pickle.dumps(bo)
-
-        if currentId == "black":
-            bo.ready = True
-            bo.start_time = time.time()
-
-        conn.send(data_string)
-        connections += 1
-
-        while True:
-            if game not in games:
-                break
-
-            try:
-                d = conn.recv(8192 * 3)
-                data = d.decode("utf-8")
-                if not d:
-                    break
-                else:
-
-                    if bo.p1Time < 0:
-                        bo.winner = "black"
-                        print("[GAME] Player" + bo.p2Name + "won in game", game)
-                    if bo.p2Time < 0:
-                        bo.winner = "white"
-                        print("[GAME] Player" + bo.p1Name + "won in game", game)
-
-                    if data == "update moves":
-                        bo.update_moves()
-
-                    if data.count("name ") == 1:
-                        name = data.split(" ")[1]
-                        if currentId == "black":
-                            bo.p2Name = name
-                        elif currentId == "white":
-                            bo.p1Name = name
-
-                    if data.count("atack ") == 1:
-                        move_list = data.split(" ")
-                        bo.make_atack(int(move_list[1]), int(move_list[2]), int(move_list[3]), int(move_list[4]))
-
-                    if data.count("move ") == 1:
-                        move_list = data.split(" ")
-                        bo.make_move(int(move_list[1]), int(move_list[2]), int(move_list[3]), int(move_list[4]))
-
-                    if bo.ready:
-                        if bo.turn == "white":
-                            bo.p1Time = bo.p1PrevTime - time.time() + bo.start_time
-                        else:
-                            bo.p2Time = bo.p2PrevTime - time.time() + bo.start_time
-
-                    sendData = pickle.dumps(bo)
-
-                conn.sendall(sendData)
-
-            except Exception as e:
-                print(e)
-
-        connections -= 1
-        try:
-            del games[game]
-            print("[GAME] Game", game, "ended")
-        except:
-            pass
-        print("[DISCONNECT] Player", name, "left game", game)
-        conn.close()
-
+    if connections % 2 == 0:
+        currentId = "white"
     else:
-        available_games = list(games.keys())
-        game_ind = 0
-        bo = games[available_games[game_ind]]
-        bo.start_user = "s"
-        data_string = pickle.dumps(bo)
-        conn.send(data_string)
+        bo.ready = True
+        bo.start_time = time.time()
+        currentId = "black"
 
-        while True:
-            available_games = list(games.keys())
-            bo = games[available_games[game_ind]]
-            try:
-                d = conn.recv(128)
-                data = d.decode("utf-8")
-                if not d:
-                    break
-                else:
-                    try:
-                        if data == "forward":
-                            print("[SPECTATOR] Moved Games forward")
-                            game_ind += 1
-                            if game_ind >= len(available_games):
-                                game_ind = 0
-                        elif data == "back":
-                            print("[SPECTATOR] Moved Games back")
-                            game_ind -= 1
-                            if game_ind < 0:
-                                game_ind = len(available_games) - 1
+    bo.start_user = currentId
 
-                        bo = games[available_games[game_ind]]
-                    except:
-                        print("[ERROR] Invalid Game Recieved from Spectator")
+    # Pickle the object and send it to the server
+    data_string = pickle.dumps(bo)
 
-                    sendData = pickle.dumps(bo)
-                    conn.sendall(sendData)
+    conn.send(data_string)
+    connections += 1
 
-            except Exception as e:
-                print(e)
+    while True:
+        if game not in games:
+            break
 
-        print("[DISCONNECT] Spectator left game", game)
-        specs -= 1
-        conn.close()
+        try:
+            d = conn.recv(8192 * 3)
+            data = d.decode("utf-8")
+            if not d:
+                break
+            else:
+
+                if bo.p1Time < 0:
+                    bo.winner = "black"
+                    print("[GAME] Player" + bo.p2Name + "won in game", game)
+                if bo.p2Time < 0:
+                    bo.winner = "white"
+                    print("[GAME] Player" + bo.p1Name + "won in game", game)
+
+                # if data == "update moves":
+                #     bo.update_moves()
+
+                if "atack " in data:
+                    move_list = data.split()
+                    bo.make_atack(int(move_list[1]), int(move_list[2]), int(move_list[3]), int(move_list[4]))
+                elif "move " in data:
+                    move_list = data.split()
+                    bo.make_move(int(move_list[1]), int(move_list[2]), int(move_list[3]), int(move_list[4]))
+                elif "name " in data:
+                    name = data[5:]
+                    if currentId == "black":
+                        bo.p2Name = name
+                    elif currentId == "white":
+                        bo.p1Name = name
+
+                if bo.ready:
+                    if bo.turn == "white":
+                        bo.p1Time = bo.p1PrevTime - time.time() + bo.start_time
+                    else:
+                        bo.p2Time = bo.p2PrevTime - time.time() + bo.start_time
+
+                sendData = pickle.dumps(bo)
+
+            conn.sendall(sendData)
+
+        except Exception as e:
+            print(f'[ERROR GAME {game}] ', e)
+            break
+
+    connections -= 1
+    try:
+        del games[game]
+        print("[GAME] Game", game, "ended")
+    except:
+        pass
+    print("[DISCONNECT] Player", name, "left game", game)
+    conn.close()
 
 
 while True:
-    read_specs()
-    if connections < 6:
+    if connections < 11:
         conn, addr = s.accept()
-        spec = False
         g = -1
         print("[CONNECT] New connection")
 
@@ -187,14 +122,7 @@ while True:
                 g = 0
                 games[g] = Board(8, 8)
 
-        '''if addr[0] in spectartor_ids and specs == 0:
-            spec = True
-            print("[SPECTATOR DATA] Games to view: ")
-            print("[SPECTATOR DATA]", games.keys())
-            g = 0
-            specs += 1'''
-
         print("[DATA] Number of Connections:", connections+1)
         print("[DATA] Number of Games:", len(games))
 
-        start_new_thread(threaded_client, (conn, g, spec))
+        start_new_thread(threaded_client, (conn, g))

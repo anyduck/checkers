@@ -18,6 +18,7 @@ class Board:
         self.must_atack = False
         self.ready = False
         self.start_time = 0
+        self.moves_list = []
 
         self.board[1][0] = Men('black')
         self.board[3][0] = Men('black')
@@ -53,27 +54,36 @@ class Board:
 
     def make_move(self, start_c, start_r, c, r):
         start_cell = self.board[start_c][start_r]
-        if not self.must_atack and start_cell != 0 and (start_c, start_r, c, r) in start_cell.moves:
+        if not self.must_atack and start_cell != 0 and \
+                (start_c, start_r, c, r) in start_cell.moves and \
+                self.turn == start_cell.get_color():
             self.board[c][r] = self.board[start_c][start_r]
             self.board[start_c][start_r] = 0
             self.change_turn()
             self.check_king()
             self.update_moves()
+            self.moves_list.append(f'{start_c}{start_r}{c}{r}')
 
     def make_atack(self, start_c, start_r, c, r):
         start_cell = self.board[start_c][start_r]
-        if self.must_atack and start_cell != 0 and (start_c, start_r, c, r) in start_cell.atacks and (self.extra_atack is None or self.extra_atack == (start_c, start_r)):
+        if self.must_atack and start_cell != 0 and \
+                (start_c, start_r, c, r) in start_cell.atacks and \
+                (self.extra_atack is None or
+                self.extra_atack == (start_c, start_r)) and \
+                self.turn == start_cell.get_color():
             self.board[c][r] = self.board[start_c][start_r]
             self.board[start_c][start_r] = 0
             self.clear_diag(start_c, start_r, c, r)
             self.check_winner()
             self.check_king()
-            self.update_moves()
+            self.board[c][r].valid_atacks(c, r, self.board)
             if self.board[c][r].atacks == set():
                 self.change_turn()
                 self.extra_atack = None
             else:
                 self.extra_atack = (c, r)
+            self.update_moves()
+            self.moves_list.append(f'{start_c}{start_r}{c}{r}')
 
     def change_turn(self):
         self.start_time = time.time()
@@ -115,30 +125,25 @@ class Board:
     def must_to_atack(self):
         for col in self.board:
             for cell in col:
-                if cell != 0 and cell.get_color() == self.turn and cell.atacks != set():
+                if cell != 0 and cell.get_color() == self.turn and \
+                        cell.atacks != set():
                     self.must_atack = True
                     return None
         self.must_atack = False
 
     def check_king(self):
         for c, col in enumerate(self.board):
-            if col[7] != 0 and col[7].get_color() == 'black' and col[7].get_type() == 'men':
-                if self.extra_atack == 0:
-                    self.board[c][7] = King('black')
-                elif self.extra_atack == self.board[c][7]:
-                    self.board[c][7] = King('black')
-                    self.extra_atack = self.board[c][7]
-                else:
-                    self.board[c][7] = King('black')
+            if col[7] != 0 and col[7].get_color() == 'black' and \
+                    col[7].get_type() == 'men':
+                self.board[c][7] = King('black')
+                if self.extra_atack is not None:
+                    self.extra_atack = (c, 7)
         for c, col in enumerate(self.board):
-            if col[0] != 0 and col[0].get_color() == 'white' and col[0].get_type() == 'men':
-                if self.extra_atack == 0:
-                    self.board[c][0] = King('white')
-                elif self.extra_atack == self.board[c][0]:
-                    self.board[c][0] = King('white')
-                    self.extra_atack = self.board[c][0]
-                else:
-                    self.board[c][0] = King('white')
+            if col[0] != 0 and col[0].get_color() == 'white' and \
+                    col[0].get_type() == 'men':
+                self.board[c][0] = King('white')
+                if self.extra_atack is not None:
+                    self.extra_atack = (c, 0)
 
     def check_winner(self):
         count_white, count_black, winner = 0, 0, 0
@@ -158,6 +163,7 @@ class Board:
         for c, col in enumerate(self.board):
             for r, cell in enumerate(col):
                 if cell != 0:
-                    cell.valid_moves(c, r, self.board)
                     cell.valid_atacks(c, r, self.board)
+                    cell.valid_moves(c, r, self.board)
+
         self.must_to_atack()
