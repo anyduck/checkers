@@ -1,3 +1,6 @@
+| :warning: WARNING for multiplayer |
+| :-------------------------------- |
+| The pickle module, that used in this project, is not secure.<br />It is possible to construct malicious pickle data which will execute arbitrary code during unpickling.<br />Safer serialization formats such as json must be used. |
 # Сheckers v1.0
 Now you can play the classic childhood game. A game against the computer is under development
 The game is written in python with the ability to multiplayer
